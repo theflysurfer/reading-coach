@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { log, logError } from '../lib/logger'
 
 /**
  * SpeechSynthesis TTS hook with sentence queue for streaming.
@@ -20,6 +21,7 @@ export function useTTS() {
         voices.find(v => v.lang === 'fr-FR') ||
         voices.find(v => v.lang.startsWith('fr')) ||
         null
+      log('🔊', `TTS voice picked: ${voiceRef.current?.name || 'none'}`, { lang: voiceRef.current?.lang, voices: voices.length })
     }
     pickVoice()
     speechSynthesis.addEventListener('voiceschanged', pickVoice)
@@ -51,7 +53,7 @@ export function useTTS() {
     }
 
     utterance.onerror = (e) => {
-      console.error('TTS error:', e)
+      logError('🔊', `TTS error: ${e.error || e}`, { sentence: sentence.slice(0, 50) })
       speakingRef.current = false
       if (queueRef.current.length > 0) {
         processQueue()
@@ -64,15 +66,18 @@ export function useTTS() {
   }, [])
 
   const speak = useCallback((sentence) => {
+    log('🔊', `TTS queue: "${sentence.slice(0, 60)}…"`, { queueLen: queueRef.current.length + 1 })
     queueRef.current.push(sentence)
     processQueue()
   }, [processQueue])
 
   const stop = useCallback(() => {
+    const dropped = queueRef.current.length
     queueRef.current = []
     speechSynthesis.cancel()
     speakingRef.current = false
     setIsSpeaking(false)
+    if (dropped > 0) log('🔊', `TTS stopped — dropped ${dropped} queued sentences`)
   }, [])
 
   return { isSpeaking, speak, stop }

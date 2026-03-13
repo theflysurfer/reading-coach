@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { log, logWarn, logError } from '../lib/logger'
 
 /**
  * Web Speech API STT hook with auto-restart on cutoff.
@@ -33,6 +34,7 @@ export function useSTT() {
         const result = event.results[i]
         if (result.isFinal) {
           final += result[0].transcript
+          log('🎤', `STT final: "${result[0].transcript.slice(0, 80)}"`, { confidence: result[0].confidence?.toFixed(2) })
         } else {
           interim += result[0].transcript
         }
@@ -45,20 +47,23 @@ export function useSTT() {
     }
 
     recognition.onerror = (event) => {
-      if (event.error === 'no-speech' || event.error === 'aborted') return
-      console.error('STT error:', event.error)
+      if (event.error === 'no-speech') { log('🎤', 'STT: no-speech detected'); return }
+      if (event.error === 'aborted') { log('🎤', 'STT: aborted'); return }
+      logError('🎤', `STT error: ${event.error}`)
       setError(event.error)
     }
 
     recognition.onend = () => {
+      log('🎤', `STT onend — shouldRestart=${shouldRestartRef.current}`)
       // Auto-restart if button is still held (Chrome cuts after ~15s)
       if (shouldRestartRef.current) {
         try {
+          log('🎤', 'STT auto-restarting (Chrome cutoff)')
           const newRecog = createRecognition()
           recognitionRef.current = newRecog
           newRecog.start()
         } catch (e) {
-          console.error('STT restart failed:', e)
+          logError('🎤', `STT restart failed: ${e.message}`)
           setIsListening(false)
           shouldRestartRef.current = false
         }
@@ -82,12 +87,13 @@ export function useSTT() {
     shouldRestartRef.current = true
 
     try {
+      log('🎤', 'STT starting', { lang: 'fr-FR' })
       const recognition = createRecognition()
       recognitionRef.current = recognition
       recognition.start()
       setIsListening(true)
     } catch (e) {
-      console.error('STT start failed:', e)
+      logError('🎤', `STT start failed: ${e.message}`)
       setError('Impossible de démarrer la reconnaissance vocale')
     }
   }, [isSupported, createRecognition])
@@ -103,6 +109,7 @@ export function useSTT() {
     setInterimTranscript('')
     // Return the final accumulated transcript
     const final = accumulatedRef.current
+    log('🎤', `STT stopped — final: "${final?.slice(0, 100)}"`, { len: final?.length })
     return final
   }, [])
 

@@ -1,3 +1,5 @@
+import { log, logPerf } from './logger'
+
 /**
  * Simple TF-IDF based RAG index for long texts.
  * Chunks text into overlapping segments, builds a term-frequency index,

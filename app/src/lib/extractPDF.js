@@ -1,8 +1,12 @@
+import { log, logPerf, logError } from './logger'
+
 /**
  * Extract text from a PDF file using pdf.js loaded from CDN.
  * Returns { title, text, charCount }
  */
 export async function extractPDF(file) {
+  const t0 = performance.now()
+  log('📄', `Extracting PDF: ${file.name}`, { size: `${(file.size/1024).toFixed(0)}KB` })
   // Lazy-load pdf.js from CDN
   if (!window.pdfjsLib) {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.124/pdf.min.mjs', true)
@@ -28,6 +32,8 @@ export async function extractPDF(file) {
   }
 
   const text = pages.join('\n\n')
+
+  logPerf('📄 PDF extracted', Math.round(performance.now() - t0), { title, pages: pdf.numPages, chars: text.length })
 
   return {
     title,

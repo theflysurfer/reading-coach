@@ -1,8 +1,12 @@
+import { log, logPerf, logWarn } from './logger'
+
 /**
  * Extract text from an EPUB file using epub.js loaded from CDN.
  * Returns { title, text, charCount, chapters }
  */
 export async function extractEPUB(file) {
+  const t0 = performance.now()
+  log('📖', `Extracting EPUB: ${file.name}`, { size: `${(file.size/1024).toFixed(0)}KB` })
   // Lazy-load epub.js
   if (!window.ePub) {
     await loadScript('https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js')
@@ -36,11 +40,13 @@ export async function extractEPUB(file) {
         fullText += `\n\n--- ${chapterTitle} ---\n\n${chapterText}`
       }
     } catch (e) {
-      console.warn('Failed to extract chapter:', e)
+      logWarn('📖', `Failed to extract chapter: ${e.message}`)
     }
   }
 
   fullText = fullText.trim()
+
+  logPerf('📖 EPUB extracted', Math.round(performance.now() - t0), { title, chapters: chapters.length, chars: fullText.length })
 
   return {
     title,

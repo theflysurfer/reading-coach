@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { ChatBubble, ThinkingIndicator, InterimBubble } from './ChatBubble'
 import { StatusBar } from './StatusBar'
-import { DebugPanel, useDebugToggle, debugLog } from './DebugPanel'
+import { DebugPanel, useDebugToggle } from './DebugPanel'
+import { log, logWarn, logError, logAction, logPerf, debugLog } from '../lib/logger'
 import { useSTT } from '../hooks/useSTT'
 import { useTTS } from '../hooks/useTTS'
 import { useVAD } from '../hooks/useVAD'
@@ -23,6 +24,7 @@ Contraintes :
 - Termine TOUJOURS par une question unique`
 
 export function Session({ config, onBack }) {
+  log('🎬', 'Session mounted', { hasText: !!config?.extractedData?.text, hasImages: !!config?.extractedData?.images, fileInfo: config?.fileInfo })
   const { apiKey, extractedData, fileInfo } = config
   const [messages, setMessages] = useState([])    // { role, content, sourceRef? }
   const [streamingText, setStreamingText] = useState('')
@@ -43,13 +45,13 @@ export function Session({ config, onBack }) {
   // Build RAG index if needed
   useEffect(() => {
     if (extractedData?.text && needsRAG(extractedData.text)) {
-      debugLog(`📚 Building RAG index for ${(extractedData.text.length/1000).toFixed(0)}k chars...`)
+      log('📚', `Building RAG index for ${(extractedData.text.length/1000).toFixed(0)}k chars...`)
       ragIndexRef.current = buildIndex(extractedData.text)
-      debugLog(`📚 RAG index built: ${ragIndexRef.current.chunks.length} chunks`)
+      log('📚', `RAG index built: ${ragIndexRef.current.chunks.length} chunks`)
     } else if (extractedData?.text) {
-      debugLog(`📚 Full context mode: ${(extractedData.text.length/1000).toFixed(0)}k chars`)
+      log('📚', `Full context mode: ${(extractedData.text.length/1000).toFixed(0)}k chars`)
     } else {
-      debugLog('📚 No text loaded — session libre')
+      log('📚', 'No text loaded — session libre')
     }
   }, [extractedData])
 
@@ -89,10 +91,10 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
 
   // --- Core LLM call ---
   const sendToLLM = useCallback(async (userText) => {
-    debugLog(`🎤 Input: "${userText.slice(0, 80)}..."`)
+    log('🎤', `Input: "${userText.slice(0, 80)}…"`, { len: userText.length, pendingImages: pendingImages.length })
 
     if (!userText || userText.trim().length < 3) {
-      debugLog('⚠️ Input too short, ignoring')
+      logWarn('🎤', 'Input too short, ignoring', { text: userText })
       setStatus('idle')
       return
     }
@@ -108,11 +110,11 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
     const model = routing.model
     setActiveModel(model)
     setModelReason(routing.reason)
-    debugLog(`🤖 Router: ${routing.reason}`)
+    log('🤖', `Router: ${routing.reason}`, { complexity: routing.complexity, model })
 
     // Build context-aware system prompt (with RAG if needed)
     const systemPrompt = buildSystemPrompt(userText)
-    debugLog(`🧠 System prompt: ${(systemPrompt.length/1000).toFixed(1)}k chars, model: ${model}`)
+    log('🧠', `System prompt: ${(systemPrompt.length/1000).toFixed(1)}k chars`, { model, msgCount: apiMessages.length, isVision: isVisionMode })
 
     // Prepare messages for API
     const apiMessages = [...messages, userMsg].map(m => ({
@@ -154,7 +156,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
           role: 'user',
           content: [...imageContent, ...textContent],
         }
-        debugLog(`👁️ Attached ${pendingImages.length} image(s) to message`)
+        log('👁️', `Attached ${pendingImages.length} image(s) to message`, { sizes: pendingImages.map(i => i.sizeKB + 'KB') })
         setPendingImages([])
       }
     }
@@ -187,7 +189,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
         }),
       })
 
-      debugLog(`📡 API response: ${res.status} (${(performance.now()-t0).toFixed(0)}ms)`)
+      logPerf('📡 API first byte', Math.round(performance.now()-t0))
 
       if (!res.ok) {
         const status_code = res.status
@@ -236,7 +238,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
             if (sentenceEnd) {
               const sentence = sentenceEnd[1].trim()
               if (sentence.length > 5) {
-                debugLog(`🔊 TTS sentence: "${sentence.slice(0, 50)}..." (${(performance.now()-t0).toFixed(0)}ms)`)
+                log('🔊', `TTS: "${sentence.slice(0, 50)}…"`, { elapsed: Math.round(performance.now()-t0) })
                 tts.speak(sentence)
               }
               sentenceBuffer = sentenceBuffer.slice(sentenceEnd[0].length)
@@ -250,7 +252,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
         tts.speak(sentenceBuffer.trim())
       }
 
-      debugLog(`✅ LLM done: ${fullResponse.length} chars, ${(performance.now()-t0).toFixed(0)}ms total`)
+      logPerf('✅ LLM complete', Math.round(performance.now()-t0), { responseLen: fullResponse.length, model })
 
       // Estimate output cost
       const outputTokensEst = fullResponse.length / 4
@@ -281,7 +283,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
 
     } catch (e) {
       if (e.name !== 'AbortError') {
-        debugLog(`❌ LLM error: ${e.message}`)
+        logError('🧠', `LLM error: ${e.message}`, { stack: e.stack?.slice(0, 200) })
         console.error('LLM error:', e)
         setError(e.message)
       }
@@ -302,7 +304,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
   // --- PTT handlers ---
   const handlePTTStart = useCallback(() => {
     if (status !== 'idle') return
-    debugLog('🎤 PTT START — listening')
+    logAction('PTT_START')
     tts.stop()
     stt.start()
     setStatus('listening')
@@ -316,7 +318,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
     await new Promise(r => setTimeout(r, 200))
     const finalTranscript = stt.transcript || transcript
 
-    debugLog(`🎤 PTT END — transcript: "${finalTranscript?.slice(0, 80)}..."`)
+    logAction('PTT_END', { transcript: finalTranscript?.slice(0, 100) })
     sendToLLM(finalTranscript)
   }, [status, stt, sendToLLM])
 
@@ -336,9 +338,9 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
     try {
       const result = await extractImage(file)
       setPendingImages(prev => [...prev, ...result.images])
-      debugLog(`📷 Image attached: ${file.name} (${result.images[0].sizeKB}KB)`)
+      log('📷', `Image attached: ${file.name}`, { sizeKB: result.images[0].sizeKB, w: result.images[0].width, h: result.images[0].height })
     } catch (err) {
-      debugLog(`❌ Image error: ${err.message}`)
+      logError('📷', `Image error: ${err.message}`)
       setError('Impossible de lire cette image')
     }
     // Reset input so same file can be re-selected

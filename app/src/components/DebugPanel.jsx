@@ -1,75 +1,86 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { getLogs, clearLogs, getLogStats, exportLogs, subscribe, debugLog } from '../lib/logger'
 
 /**
- * In-app debug panel for mobile testing.
- * Triple-tap the header to toggle.
- * Captures console.log/warn/error + custom events.
+ * In-app debug panel — always available, triple-tap header to toggle.
+ * Shows rolling logs from logger.js (2MB buffer, persisted in sessionStorage).
+ * 
+ * Features:
+ * - Filter by level (all/log/warn/error/action/net/perf)
+ * - Search text filter
+ * - Export logs as JSON
+ * - Live stats (count, size, memory)
+ * - Auto-scroll with manual scroll lock
  */
 
-const MAX_LOGS = 200
-const logs = []
-let listeners = new Set()
-
-// Intercept console
-const origLog = console.log
-const origWarn = console.warn
-const origError = console.error
-
-function addLog(level, args) {
-  const entry = {
-    id: Date.now() + Math.random(),
-    time: new Date().toLocaleTimeString('fr-FR', { hour12: false }),
-    level,
-    msg: args.map(a => {
-      if (typeof a === 'string') return a
-      try { return JSON.stringify(a, null, 0) } catch { return String(a) }
-    }).join(' '),
-  }
-  logs.push(entry)
-  if (logs.length > MAX_LOGS) logs.shift()
-  listeners.forEach(fn => fn([...logs]))
+const LEVEL_COLORS = {
+  log: '#aaa',
+  warn: '#f59e0b',
+  error: '#ef4444',
+  action: '#22c55e',
+  net: '#3b82f6',
+  perf: '#a855f7',
 }
 
-console.log = (...args) => { origLog(...args); addLog('log', args) }
-console.warn = (...args) => { origWarn(...args); addLog('warn', args) }
-console.error = (...args) => { origError(...args); addLog('error', args) }
-
-// Capture unhandled errors
-window.addEventListener('error', (e) => {
-  addLog('error', [`[UNCAUGHT] ${e.message} (${e.filename}:${e.lineno})`])
-})
-window.addEventListener('unhandledrejection', (e) => {
-  addLog('error', [`[UNHANDLED PROMISE] ${e.reason}`])
-})
-
-// Public API for custom debug events
-export function debugLog(msg, data) {
-  addLog('log', data ? [msg, data] : [msg])
+const LEVEL_LABELS = {
+  all: '🔍 All',
+  log: '📝',
+  warn: '⚠️',
+  error: '❌',
+  action: '👆',
+  net: '🌐',
+  perf: '⏱️',
 }
+
+export { debugLog }
 
 export function DebugPanel() {
-  const [visible, setVisible] = useState(false)
-  const [entries, setEntries] = useState([...logs])
+  const [entries, setEntries] = useState(getLogs())
   const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [autoScroll, setAutoScroll] = useState(true)
+  const [expanded, setExpanded] = useState(false)  // full screen mode
+  const scrollRef = useRef(null)
   const endRef = useRef(null)
 
   useEffect(() => {
-    const listener = (newLogs) => setEntries(newLogs)
-    listeners.add(listener)
-    return () => listeners.delete(listener)
+    return subscribe((newEntries) => setEntries([...newEntries]))
   }, [])
 
+  // Auto-scroll when new entries arrive
   useEffect(() => {
-    if (visible) endRef.current?.scrollIntoView()
-  }, [entries, visible])
+    if (autoScroll && endRef.current) {
+      endRef.current.scrollIntoView({ behavior: 'auto' })
+    }
+  }, [entries, autoScroll])
 
-  if (!visible) return null
+  // Detect manual scroll
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+    setAutoScroll(isAtBottom)
+  }, [])
 
-  const filtered = filter === 'all'
-    ? entries
-    : entries.filter(e => e.level === filter)
+  const filtered = entries.filter(e => {
+    if (filter !== 'all' && e.lvl !== filter) return false
+    if (search && !e.msg?.toLowerCase().includes(search.toLowerCase()) && !e.d?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
 
-  const levelColor = { log: '#ccc', warn: '#f59e0b', error: '#ef4444' }
+  const stats = getLogStats()
+
+  const handleExport = () => {
+    const blob = new Blob([exportLogs()], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `rc-logs-${new Date().toISOString().slice(0, 16)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const panelHeight = expanded ? '100vh' : '45vh'
 
   return (
     <div style={{
@@ -77,75 +88,150 @@ export function DebugPanel() {
       bottom: 0,
       left: 0,
       right: 0,
-      height: '40vh',
-      background: '#111',
+      height: panelHeight,
+      background: '#0a0a0a',
       color: '#eee',
       fontSize: '11px',
-      fontFamily: 'monospace',
+      fontFamily: "'SF Mono', 'Cascadia Code', 'Fira Code', monospace",
       zIndex: 9999,
       display: 'flex',
       flexDirection: 'column',
       borderTop: '2px solid #333',
+      transition: 'height 0.2s',
     }}>
       {/* Toolbar */}
       <div style={{
         display: 'flex',
-        gap: '6px',
-        padding: '4px 8px',
-        background: '#1a1a1a',
+        gap: '4px',
+        padding: '3px 6px',
+        background: '#111',
         alignItems: 'center',
         flexShrink: 0,
+        flexWrap: 'wrap',
       }}>
-        <span style={{ fontWeight: 'bold' }}>🐛 Debug</span>
-        {['all', 'log', 'warn', 'error'].map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              background: filter === f ? '#333' : 'transparent',
-              color: f === 'all' ? '#eee' : levelColor[f],
-              border: '1px solid #333',
-              borderRadius: '3px',
-              padding: '1px 6px',
-              fontSize: '10px',
-              cursor: 'pointer',
-            }}
-          >
-            {f} ({f === 'all' ? entries.length : entries.filter(e => e.level === f).length})
-          </button>
-        ))}
+        <span style={{ fontWeight: 'bold', fontSize: '12px' }}>🐛</span>
+        
+        {/* Level filters */}
+        {Object.keys(LEVEL_LABELS).map(lvl => {
+          const count = lvl === 'all' ? entries.length : entries.filter(e => e.lvl === lvl).length
+          if (lvl !== 'all' && count === 0) return null
+          return (
+            <button
+              key={lvl}
+              onClick={() => setFilter(lvl)}
+              style={{
+                background: filter === lvl ? '#2a2a2a' : 'transparent',
+                color: lvl === 'all' ? '#eee' : LEVEL_COLORS[lvl],
+                border: filter === lvl ? '1px solid #444' : '1px solid transparent',
+                borderRadius: '3px',
+                padding: '1px 5px',
+                fontSize: '10px',
+                cursor: 'pointer',
+                lineHeight: '16px',
+              }}
+            >
+              {LEVEL_LABELS[lvl]} {count}
+            </button>
+          )
+        })}
+
         <div style={{ flex: 1 }} />
-        <button
-          onClick={() => { logs.length = 0; setEntries([]) }}
-          style={{ background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '10px' }}
-        >
-          Clear
-        </button>
-        <button
-          onClick={() => setVisible(false)}
-          style={{ background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '14px' }}
-        >
-          ✕
+
+        {/* Stats */}
+        <span style={{ color: '#555', fontSize: '9px' }}>
+          {stats.sizeFormatted}
+        </span>
+
+        {/* Search */}
+        <input
+          type="text"
+          placeholder="filter…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            width: '80px',
+            background: '#1a1a1a',
+            border: '1px solid #333',
+            borderRadius: '3px',
+            color: '#eee',
+            fontSize: '10px',
+            padding: '1px 4px',
+          }}
+        />
+
+        {/* Actions */}
+        <button onClick={handleExport} style={btnStyle} title="Export JSON">📤</button>
+        <button onClick={clearLogs} style={btnStyle} title="Clear">🗑️</button>
+        <button onClick={() => setExpanded(e => !e)} style={btnStyle} title="Expand/collapse">
+          {expanded ? '🔽' : '🔼'}
         </button>
       </div>
 
       {/* Log entries */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '4px 8px' }}>
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        style={{ flex: 1, overflow: 'auto', padding: '2px 6px' }}
+      >
         {filtered.map(e => (
-          <div key={e.id} style={{ color: levelColor[e.level], padding: '1px 0', wordBreak: 'break-all' }}>
-            <span style={{ color: '#555' }}>{e.time}</span>{' '}
-            {e.msg}
+          <div key={e._id} style={{
+            color: LEVEL_COLORS[e.lvl] || '#aaa',
+            padding: '1px 0',
+            wordBreak: 'break-all',
+            lineHeight: '14px',
+            borderBottom: e.lvl === 'error' ? '1px solid #3a1111' : 'none',
+          }}>
+            <span style={{ color: '#444' }}>{e.ts}</span>
+            {' '}
+            <span>{e.tag}</span>
+            {' '}
+            <span style={{ color: e.lvl === 'error' ? '#f87171' : e.lvl === 'warn' ? '#fbbf24' : '#ddd' }}>
+              {e.msg}
+            </span>
+            {e.d && (
+              <span style={{ color: '#666', marginLeft: '4px' }}>
+                {e.d.length > 150 ? e.d.slice(0, 150) + '…' : e.d}
+              </span>
+            )}
           </div>
         ))}
         <div ref={endRef} />
       </div>
+
+      {/* Auto-scroll indicator */}
+      {!autoScroll && (
+        <button
+          onClick={() => { setAutoScroll(true); endRef.current?.scrollIntoView() }}
+          style={{
+            position: 'absolute',
+            bottom: '8px',
+            right: '8px',
+            background: '#333',
+            color: '#eee',
+            border: 'none',
+            borderRadius: '50%',
+            width: '28px',
+            height: '28px',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >↓</button>
+      )}
     </div>
   )
 }
 
+const btnStyle = {
+  background: 'transparent',
+  border: 'none',
+  color: '#666',
+  cursor: 'pointer',
+  fontSize: '12px',
+  padding: '0 2px',
+}
+
 /**
- * Hook to expose the toggle function.
- * Returns { toggleDebug, debugVisible }
+ * Hook for triple-tap toggle.
  */
 export function useDebugToggle() {
   const [visible, setVisible] = useState(false)

@@ -1,3 +1,5 @@
+import { log, logPerf } from './logger'
+
 /**
  * Extract images as base64 data URLs for vision-based LLM processing.
  * Supports: JPG, PNG, WEBP, HEIC
@@ -57,9 +59,13 @@ function resizeAndEncode(file) {
  * Returns { type: 'image', title, images: [{ dataUrl, width, height }] }
  */
 export async function extractImage(file) {
+  const t0 = performance.now()
+  log('📷', `Extracting image: ${file.name}`, { size: `${(file.size/1024).toFixed(0)}KB`, type: file.type })
+  
   const imageData = await resizeAndEncode(file)
-
   const title = file.name.replace(/\.[^.]+$/, '')
+
+  logPerf('📷 Image processed', Math.round(performance.now() - t0), { w: imageData.width, h: imageData.height, outputKB: imageData.sizeKB })
 
   return {
     type: 'image',

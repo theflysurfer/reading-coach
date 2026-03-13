@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react'
+import { log, logError, logAction } from '../lib/logger'
 import { extractPDF } from '../lib/extractPDF'
 import { extractEPUB } from '../lib/extractEPUB'
 import { extractText } from '../lib/extractText'
@@ -15,6 +16,7 @@ export function Setup({ onStart }) {
   const fileInputRef = useRef(null)
 
   const handleFile = useCallback(async (file) => {
+    logAction('FILE_IMPORT', { name: file.name, size: `${(file.size/1024).toFixed(0)}KB`, type: file.type })
     setLoading(true)
     setError(null)
     setFileInfo(null)
@@ -22,6 +24,7 @@ export function Setup({ onStart }) {
 
     try {
       const ext = file.name.split('.').pop().toLowerCase()
+      log('📂', `File extension: .${ext}`)
       let result
 
       if (ext === 'pdf') {
@@ -57,7 +60,7 @@ export function Setup({ onStart }) {
         setExtractedData(result)
       }
     } catch (e) {
-      console.error('Extraction error:', e)
+      logError('📂', `Extraction error: ${e.message}`, { stack: e.stack?.slice(0, 200) })
       setError(e.message || 'Impossible de lire ce fichier')
     } finally {
       setLoading(false)
@@ -74,6 +77,7 @@ export function Setup({ onStart }) {
   const canStart = apiKey.length > 10
 
   const handleStart = () => {
+    logAction('SESSION_START', { hasFile: !!extractedData, mode: fileInfo?.mode, apiKeyLen: apiKey?.length })
     onStart({
       apiKey,
       extractedData,
