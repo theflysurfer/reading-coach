@@ -295,12 +295,19 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
         console.error('LLM error:', e)
         setError(e.message)
       }
+      // ALWAYS reset to idle on error
+      setStatus('idle')
+      setStreamingText('')
+      return
     }
 
-    // Wait for TTS to finish, then go idle
+    // Wait for TTS to finish, then go idle (max 30s safety)
+    let ttsWaitCount = 0
     const waitForTTS = () => {
-      if (!speechSynthesis.speaking) {
+      ttsWaitCount++
+      if (!speechSynthesis.speaking || ttsWaitCount > 150) { // 150 * 200ms = 30s max
         setStatus('idle')
+        if (ttsWaitCount > 150) logWarn('🔊', 'TTS wait timeout — forcing idle')
       } else {
         setTimeout(waitForTTS, 200)
       }

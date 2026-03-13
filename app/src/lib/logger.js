@@ -279,6 +279,54 @@ window.addEventListener('unhandledrejection', (e) => {
   }))
 })
 
+// === Remote log drain ===
+// Send logs to server every 5s for remote debugging
+
+const LOG_DRAIN_URL = '/api/logs'
+const DRAIN_INTERVAL = 5000
+let _lastDrainedId = 0
+const _clientId = Math.random().toString(36).slice(2, 8) // unique per tab
+
+setInterval(async () => {
+  // Collect entries not yet sent
+  const unsent = entries.filter(e => e._id > _lastDrainedId)
+  if (unsent.length === 0) return
+
+  // Cap at 50 entries per batch to avoid huge payloads
+  const batch = unsent.slice(0, 50)
+  const maxId = batch[batch.length - 1]._id
+
+  try {
+    const res = await _origFetch(LOG_DRAIN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: _clientId, entries: batch }),
+      keepalive: true,
+    })
+    if (res.ok) {
+      _lastDrainedId = maxId
+    }
+  } catch {
+    // Offline or server down — will retry next interval
+  }
+}, DRAIN_INTERVAL)
+
+// Also flush on page hide (user leaving)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    const unsent = entries.filter(e => e._id > _lastDrainedId).slice(0, 50)
+    if (unsent.length === 0) return
+    // Use sendBeacon for reliability on page hide
+    try {
+      navigator.sendBeacon(LOG_DRAIN_URL, JSON.stringify({
+        clientId: _clientId,
+        entries: unsent,
+      }))
+      _lastDrainedId = unsent[unsent.length - 1]._id
+    } catch { /* best effort */ }
+  }
+})
+
 // === App lifecycle ===
 
 // Log visibility changes (user switches tab/app)
