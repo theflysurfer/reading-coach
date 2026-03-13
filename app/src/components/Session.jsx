@@ -6,6 +6,7 @@ import { useSTT } from '../hooks/useSTT'
 import { useTTS } from '../hooks/useTTS'
 import { useVAD } from '../hooks/useVAD'
 import { needsRAG, buildIndex, formatChunksForPrompt } from '../lib/ragIndex'
+import { selectModel } from '../lib/modelRouter'
 
 const SYSTEM_PROMPT_TEMPLATE = `Tu es un coach de lecture expert, chaleureux et exigeant.
 Le lecteur lit un texte physiquement et te cite des passages oralement.
@@ -21,7 +22,7 @@ Contraintes :
 - Termine TOUJOURS par une question unique`
 
 export function Session({ config, onBack }) {
-  const { apiKey, model, extractedData, fileInfo } = config
+  const { apiKey, extractedData, fileInfo } = config
   const [messages, setMessages] = useState([])    // { role, content, sourceRef? }
   const [streamingText, setStreamingText] = useState('')
   const [status, setStatus] = useState('idle')     // idle | listening | thinking | speaking
@@ -30,6 +31,8 @@ export function Session({ config, onBack }) {
   const [cost, setCost] = useState(0)
   const [waveformData, setWaveformData] = useState(null)
   const [textInput, setTextInput] = useState('')    // fallback text input for testing
+  const [activeModel, setActiveModel] = useState('google/gemini-2.5-flash')
+  const [modelReason, setModelReason] = useState('')
   const chatEndRef = useRef(null)
   const ragIndexRef = useRef(null)
   const { debugVisible, toggleDebug, setDebugVisible } = useDebugToggle()
@@ -89,6 +92,13 @@ export function Session({ config, onBack }) {
     setMessages(prev => [...prev, userMsg])
     setStatus('thinking')
     setStreamingText('')
+
+    // Smart model selection
+    const routing = selectModel(userText, messages.length)
+    const model = routing.model
+    setActiveModel(model)
+    setModelReason(routing.reason)
+    debugLog(`🤖 Router: ${routing.reason}`)
 
     // Build context-aware system prompt (with RAG if needed)
     const systemPrompt = buildSystemPrompt(userText)
@@ -197,9 +207,7 @@ export function Session({ config, onBack }) {
       const outputTokensEst = fullResponse.length / 4
       const modelCosts = {
         'google/gemini-2.5-flash': { input: 0.15, output: 0.60 },
-        'deepseek/deepseek-chat-v3-0324': { input: 0.14, output: 0.28 },
         'google/gemini-2.5-pro': { input: 1.25, output: 10.0 },
-        'anthropic/claude-sonnet-4': { input: 3.0, output: 15.0 },
       }
       const mc = modelCosts[model] || { input: 0.5, output: 1.0 }
       const callCost = (inputTokensEst * mc.input + outputTokensEst * mc.output) / 1_000_000
@@ -310,7 +318,7 @@ export function Session({ config, onBack }) {
   }
 
   // Model display name
-  const modelName = model.split('/').pop().replace(/-/g, ' ')
+  const modelName = activeModel.split('/').pop().replace(/-/g, ' ')
 
   return (
     <div className="session-screen">
@@ -323,6 +331,7 @@ export function Session({ config, onBack }) {
           </div>
           <div className="model-info">
             {modelName}
+            {activeModel.includes('pro') && <span className="badge-pro">⚡ Pro</span>}
             {fileInfo?.mode === 'RAG' && <span className="badge-rag">📎 RAG</span>}
           </div>
         </div>

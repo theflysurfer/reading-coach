@@ -4,16 +4,8 @@ import { extractEPUB } from '../lib/extractEPUB'
 import { extractText } from '../lib/extractText'
 import { needsRAG } from '../lib/ragIndex'
 
-const MODELS = [
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: '$0.15/M in', badge: '✅ Recommandé' },
-  { id: 'deepseek/deepseek-chat-v3-0324', name: 'DeepSeek V3', cost: '$0.14/M in', badge: 'Budget' },
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: '$1.25/M in', badge: 'Premium' },
-  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', cost: '$3.00/M in', badge: 'Précis' },
-]
-
 export function Setup({ onStart }) {
   const apiKey = import.meta.env.VITE_OPENROUTER_KEY || sessionStorage.getItem('or_key') || ''
-  const [model, setModel] = useState(MODELS[0].id)
   const [fileInfo, setFileInfo] = useState(null)
   const [extractedData, setExtractedData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -69,7 +61,6 @@ export function Setup({ onStart }) {
   const handleStart = () => {
     onStart({
       apiKey,
-      model,
       extractedData,
       fileInfo,
     })
@@ -80,16 +71,12 @@ export function Setup({ onStart }) {
       <h1>📖 Coach de Lecture</h1>
       <p className="subtitle">Dialogue vocal avec tes livres</p>
 
-      {/* Model selector */}
-      <div className="form-group">
-        <label>Modèle LLM</label>
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
-          {MODELS.map(m => (
-            <option key={m.id} value={m.id}>
-              {m.name} — {m.cost} ({m.badge})
-            </option>
-          ))}
-        </select>
+      {/* Model info */}
+      <div className="model-auto-info">
+        🤖 Modèle sélectionné automatiquement selon la complexité
+        <div className="model-auto-detail">
+          Flash pour les questions simples · Pro pour l'analyse approfondie
+        </div>
       </div>
 
       {/* File import */}
