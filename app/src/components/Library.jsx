@@ -2,6 +2,34 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { getBooks, deleteBook, getSessionsForBook } from '../lib/db'
 import { log, logAction } from '../lib/logger'
 
+/** Book cover with fallback placeholder */
+function BookCover({ title, coverUrl, color }) {
+  const [imgFailed, setImgFailed] = React.useState(false)
+  
+  if (coverUrl && !imgFailed) {
+    return (
+      <div style={{ position: 'relative' }}>
+        <div className="book-card-placeholder" style={{ background: color }}>
+          <span>{title.slice(0, 2).toUpperCase()}</span>
+        </div>
+        <img
+          src={coverUrl}
+          alt={title}
+          className="book-card-cover"
+          style={{ position: 'absolute', inset: 0 }}
+          onError={() => setImgFailed(true)}
+        />
+      </div>
+    )
+  }
+  
+  return (
+    <div className="book-card-placeholder" style={{ background: color }}>
+      <span>{title.slice(0, 2).toUpperCase()}</span>
+    </div>
+  )
+}
+
 /**
  * Library screen — grid of books with session counts.
  * Main screen of the app.
@@ -89,13 +117,7 @@ export function Library({ onOpenBook, onAddBook }) {
               onClick={() => { logAction('BOOK_OPEN', { id: book.id }); onOpenBook(book) }}
               onContextMenu={(e) => handleLongPress(book.id, e)}
             >
-              {book.coverUrl ? (
-                <img src={book.coverUrl} alt={book.title} className="book-card-cover" />
-              ) : (
-                <div className="book-card-placeholder" style={{ background: bookColor(book.title) }}>
-                  <span>{book.title.slice(0, 2).toUpperCase()}</span>
-                </div>
-              )}
+              <BookCover title={book.title} coverUrl={book.coverUrl} color={bookColor(book.title)} />
               <div className="book-card-info">
                 <div className="book-card-title">{book.title}</div>
                 {book.author && <div className="book-card-author">{book.author}</div>}

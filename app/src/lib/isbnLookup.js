@@ -17,10 +17,25 @@ export async function lookupISBN(isbn) {
       const data = await res.json()
       if (data.totalItems > 0) {
         const vol = data.items[0].volumeInfo
+        // Get best cover URL: prefer large > medium > small > thumbnail
+        const imgs = vol.imageLinks || {}
+        let coverUrl = (imgs.extraLarge || imgs.large || imgs.medium || imgs.small || imgs.thumbnail || '')
+          .replace('http:', 'https:')
+          .replace('&edge=curl', '') // remove curl effect
+        
+        // Boost resolution: replace zoom=1 with zoom=2 for larger image
+        if (coverUrl) {
+          coverUrl = coverUrl.replace('zoom=1', 'zoom=2')
+        }
+        
+        // Also try Open Library cover as fallback (often better quality)
+        const olCover = `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`
+
         const result = {
           title: vol.title || 'Titre inconnu',
           author: vol.authors?.join(', ') || '',
-          coverUrl: vol.imageLinks?.thumbnail?.replace('http:', 'https:') || null,
+          coverUrl: coverUrl || olCover,
+          coverUrlFallback: coverUrl ? olCover : null,
           description: vol.description?.slice(0, 300) || '',
           pageCount: vol.pageCount || null,
           isbn,
@@ -29,7 +44,7 @@ export async function lookupISBN(isbn) {
           publishedDate: vol.publishedDate || '',
           source: 'google-books',
         }
-        log('🔍', `Google Books: "${result.title}" by ${result.author}`)
+        log('🔍', `Google Books: "${result.title}" by ${result.author}`, { coverUrl: result.coverUrl })
         return result
       }
     }
@@ -50,7 +65,9 @@ export async function lookupISBN(isbn) {
         const result = {
           title: details.title || 'Titre inconnu',
           author: details.authors?.map(a => a.name).join(', ') || '',
-          coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null,
+          coverUrl: coverId
+            ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`
+            : `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`,
           description: typeof details.description === 'string'
             ? details.description.slice(0, 300)
             : details.description?.value?.slice(0, 300) || '',
