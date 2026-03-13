@@ -467,6 +467,49 @@ html, body {
   margin-top: -0.25rem;
 }
 
+/* Text input fallback */
+.text-input-bar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-top: 1px solid #e8e8e8;
+  flex-shrink: 0;
+}
+
+.text-input-bar input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid #e0e0e0;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  background: var(--bg);
+}
+
+.text-input-bar input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.text-input-bar button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-input-bar button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* Error messages */
 .error-banner {
   padding: 0.6rem 1rem;

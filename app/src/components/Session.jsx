@@ -29,6 +29,7 @@ export function Session({ config, onBack }) {
   const [vadEnabled, setVadEnabled] = useState(false)
   const [cost, setCost] = useState(0)
   const [waveformData, setWaveformData] = useState(null)
+  const [textInput, setTextInput] = useState('')    // fallback text input for testing
   const chatEndRef = useRef(null)
   const ragIndexRef = useRef(null)
   const { debugVisible, toggleDebug, setDebugVisible } = useDebugToggle()
@@ -73,41 +74,24 @@ export function Session({ config, onBack }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingText, status])
 
-  // --- Core cycle: PTT → STT → LLM → TTS ---
+  // --- Core LLM call ---
+  const sendToLLM = useCallback(async (userText) => {
+    debugLog(`🎤 Input: "${userText.slice(0, 80)}..."`)
 
-  const handlePTTStart = useCallback(() => {
-    if (status !== 'idle') return
-    debugLog('🎤 PTT START — listening')
-    tts.stop() // stop any ongoing TTS
-    stt.start()
-    setStatus('listening')
-    setError(null)
-  }, [status, stt, tts])
-
-  const handlePTTEnd = useCallback(async () => {
-    if (status !== 'listening') return
-    const transcript = stt.stop()
-
-    // Wait a tick for final transcript
-    await new Promise(r => setTimeout(r, 200))
-    const finalTranscript = stt.transcript || transcript
-
-    debugLog(`🎤 PTT END — transcript: "${finalTranscript?.slice(0, 80)}..."`)
-
-    if (!finalTranscript || finalTranscript.trim().length < 3) {
-      debugLog('⚠️ Transcript too short, ignoring')
+    if (!userText || userText.trim().length < 3) {
+      debugLog('⚠️ Input too short, ignoring')
       setStatus('idle')
       return
     }
 
     // Add user message
-    const userMsg = { role: 'user', content: finalTranscript }
+    const userMsg = { role: 'user', content: userText }
     setMessages(prev => [...prev, userMsg])
     setStatus('thinking')
     setStreamingText('')
 
     // Build context-aware system prompt (with RAG if needed)
-    const systemPrompt = buildSystemPrompt(finalTranscript)
+    const systemPrompt = buildSystemPrompt(userText)
     debugLog(`🧠 System prompt: ${(systemPrompt.length/1000).toFixed(1)}k chars, model: ${model}`)
 
     // Prepare messages for API
@@ -124,8 +108,6 @@ export function Session({ config, onBack }) {
     const t0 = performance.now()
 
     try {
-      const abortController = new AbortController()
-
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -144,7 +126,6 @@ export function Session({ config, onBack }) {
           temperature: 1.0,
           stream: true,
         }),
-        signal: abortController.signal,
       })
 
       debugLog(`📡 API response: ${res.status} (${(performance.now()-t0).toFixed(0)}ms)`)
@@ -210,6 +191,8 @@ export function Session({ config, onBack }) {
         tts.speak(sentenceBuffer.trim())
       }
 
+      debugLog(`✅ LLM done: ${fullResponse.length} chars, ${(performance.now()-t0).toFixed(0)}ms total`)
+
       // Estimate output cost
       const outputTokensEst = fullResponse.length / 4
       const modelCosts = {
@@ -222,12 +205,10 @@ export function Session({ config, onBack }) {
       const callCost = (inputTokensEst * mc.input + outputTokensEst * mc.output) / 1_000_000
       setCost(prev => prev + callCost)
 
-      debugLog(`✅ LLM done: ${fullResponse.length} chars, ${(performance.now()-t0).toFixed(0)}ms total`)
-
       // Build source ref for RAG mode
       let sourceRef = null
       if (ragIndexRef.current) {
-        const results = ragIndexRef.current.search(finalTranscript)
+        const results = ragIndexRef.current.search(userText)
         if (results.length > 0) {
           sourceRef = results.map(r => r.chunk.position).join(', ')
         }
@@ -259,7 +240,45 @@ export function Session({ config, onBack }) {
     }
     waitForTTS()
 
-  }, [status, stt, tts, messages, apiKey, model, buildSystemPrompt])
+  }, [status, tts, messages, apiKey, model, buildSystemPrompt])
+
+  // --- PTT handlers ---
+  const handlePTTStart = useCallback(() => {
+    if (status !== 'idle') return
+    debugLog('🎤 PTT START — listening')
+    tts.stop()
+    stt.start()
+    setStatus('listening')
+    setError(null)
+  }, [status, stt, tts])
+
+  const handlePTTEnd = useCallback(async () => {
+    if (status !== 'listening') return
+    const transcript = stt.stop()
+
+    await new Promise(r => setTimeout(r, 200))
+    const finalTranscript = stt.transcript || transcript
+
+    debugLog(`🎤 PTT END — transcript: "${finalTranscript?.slice(0, 80)}..."`)
+    sendToLLM(finalTranscript)
+  }, [status, stt, sendToLLM])
+
+  // --- Text input handler (testing fallback) ---
+  const handleTextSubmit = useCallback((e) => {
+    e.preventDefault()
+    if (status !== 'idle' || !textInput.trim()) return
+    const msg = textInput.trim()
+    setTextInput('')
+    sendToLLM(msg)
+  }, [status, textInput, sendToLLM])
+
+  // Expose sendToLLM globally for E2E testing
+  useEffect(() => {
+    window.__TEST_SEND = (text) => sendToLLM(text)
+    window.__TEST_STATUS = () => status
+    window.__TEST_MESSAGES = () => messages
+    return () => { delete window.__TEST_SEND; delete window.__TEST_STATUS; delete window.__TEST_MESSAGES }
+  }, [sendToLLM, status, messages])
 
   // VAD integration
   const handleVADSpeechStart = useCallback(() => {
@@ -307,7 +326,7 @@ export function Session({ config, onBack }) {
             {fileInfo?.mode === 'RAG' && <span className="badge-rag">📎 RAG</span>}
           </div>
         </div>
-        <button className="reset-btn" onClick={handleReset} title="Reset">↻</button>
+        <button className="reset-btn" onClick={(e) => { e.stopPropagation(); handleReset() }} title="Reset">↻</button>
       </div>
 
       {/* Error banner */}
@@ -357,6 +376,18 @@ export function Session({ config, onBack }) {
 
         <div ref={chatEndRef} />
       </div>
+
+      {/* Text input fallback (for testing / accessibility) */}
+      <form className="text-input-bar" onSubmit={handleTextSubmit}>
+        <input
+          type="text"
+          placeholder="Ou tape ta question ici…"
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          disabled={status !== 'idle'}
+        />
+        <button type="submit" disabled={status !== 'idle' || !textInput.trim()}>↑</button>
+      </form>
 
       {/* Status bar */}
       <StatusBar
