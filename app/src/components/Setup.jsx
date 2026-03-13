@@ -12,7 +12,7 @@ const MODELS = [
 ]
 
 export function Setup({ onStart }) {
-  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('or_key') || import.meta.env.VITE_OPENROUTER_KEY || '')
+  const apiKey = import.meta.env.VITE_OPENROUTER_KEY || sessionStorage.getItem('or_key') || ''
   const [model, setModel] = useState(MODELS[0].id)
   const [fileInfo, setFileInfo] = useState(null)
   const [extractedData, setExtractedData] = useState(null)
@@ -64,12 +64,6 @@ export function Setup({ onStart }) {
     if (file) handleFile(file)
   }, [handleFile])
 
-  const handleApiKeyChange = (e) => {
-    const key = e.target.value
-    setApiKey(key)
-    sessionStorage.setItem('or_key', key)
-  }
-
   const canStart = apiKey.length > 10
 
   const handleStart = () => {
@@ -85,18 +79,6 @@ export function Setup({ onStart }) {
     <div className="setup-screen">
       <h1>📖 Coach de Lecture</h1>
       <p className="subtitle">Dialogue vocal avec tes livres</p>
-
-      {/* API Key */}
-      <div className="form-group">
-        <label>Clé API OpenRouter</label>
-        <input
-          type="password"
-          placeholder="sk-or-..."
-          value={apiKey}
-          onChange={handleApiKeyChange}
-          autoComplete="off"
-        />
-      </div>
 
       {/* Model selector */}
       <div className="form-group">
