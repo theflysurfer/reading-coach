@@ -35,27 +35,21 @@ jobs:
           host: 69.62.108.82
           username: automation
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'app/dist/'
+          source: 'app/dist/*'
           target: /opt/reading-coach/
           strip_components: 2
           overwrite: true
-          rm: true
 
-      - name: Deploy nginx cache config + reload
+      - name: Verify deployment
         uses: appleboy/ssh-action@v1
         with:
           host: 69.62.108.82
           username: automation
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "=== Files deployed ==="
+            echo "=== Deployed files ==="
             ls -la /opt/reading-coach/
-            ls -la /opt/reading-coach/assets/ 2>/dev/null | head -5
-            
-            echo "=== Verify key files ==="
-            test -f /opt/reading-coach/sw.js && echo "sw.js OK" || echo "sw.js MISSING"
-            test -f /opt/reading-coach/manifest.json && echo "manifest.json OK" || echo "manifest.json MISSING"
-            test -f /opt/reading-coach/index.html && echo "index.html OK" || echo "index.html MISSING"
-            
-            # Reload nginx
-            sudo nginx -t && sudo systemctl reload nginx || echo "nginx reload skipped"
+            test -f /opt/reading-coach/sw.js && echo "✅ sw.js" || echo "❌ sw.js MISSING"
+            test -f /opt/reading-coach/manifest.json && echo "✅ manifest.json" || echo "❌ manifest.json MISSING"
+            test -f /opt/reading-coach/index.html && echo "✅ index.html" || echo "❌ index.html MISSING"
+            head -1 /opt/reading-coach/sw.js 2>/dev/null
