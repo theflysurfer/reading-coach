@@ -1,5 +1,6 @@
 // Logger MUST be imported first — intercepts console/fetch before anything else
 import './lib/logger.js'
+import { registerSW } from './lib/swRegister.js'
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -43,3 +44,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     React.createElement(App)
   ),
 )
+
+// Register Service Worker after React mounts
+registerSW()

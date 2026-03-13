@@ -29,13 +29,38 @@ jobs:
         env:
           VITE_OPENROUTER_KEY: ${{ secrets.VITE_OPENROUTER_KEY }}
 
-      - name: Deploy to Hostinger
+      - name: Deploy files to Hostinger
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 69.62.108.82
           username: automation
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'app/dist/*'
-          target: /opt/reading-coach/
-          strip_components: 2
+          source: 'app/dist/*,deploy/nginx-cache-headers.conf'
+          target: /opt/reading-coach/_upload/
           overwrite: true
+
+      - name: Activate deployment + nginx cache headers
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 69.62.108.82
+          username: automation
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Move built files into place
+            rsync -a --delete /opt/reading-coach/_upload/app/dist/ /opt/reading-coach/
+            
+            # Copy nginx cache config
+            cp /opt/reading-coach/_upload/deploy/nginx-cache-headers.conf /opt/reading-coach/nginx-cache-headers.conf
+            
+            # Clean upload staging
+            rm -rf /opt/reading-coach/_upload/
+            
+            # Check if nginx include is already in the site config
+            NGINX_CONF="/etc/nginx/sites-available/reading-coach.srv759970.hstgr.cloud"
+            if ! grep -q "nginx-cache-headers.conf" "$NGINX_CONF" 2>/dev/null; then
+              echo "NOTE: Add this line inside the server block of $NGINX_CONF:"
+              echo '  include /opt/reading-coach/nginx-cache-headers.conf;'
+            fi
+            
+            # Reload nginx if we have permissions
+            sudo nginx -t && sudo systemctl reload nginx || echo "nginx reload skipped (no sudo)"
