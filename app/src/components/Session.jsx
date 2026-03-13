@@ -7,6 +7,7 @@ import { useTTS } from '../hooks/useTTS'
 import { useVAD } from '../hooks/useVAD'
 import { needsRAG, buildIndex, formatChunksForPrompt } from '../lib/ragIndex'
 import { selectModel } from '../lib/modelRouter'
+import { extractImage } from '../lib/extractImage'
 
 const SYSTEM_PROMPT_TEMPLATE = `Tu es un coach de lecture expert, chaleureux et exigeant.
 Le lecteur lit un texte physiquement et te cite des passages oralement.
@@ -31,10 +32,12 @@ export function Session({ config, onBack }) {
   const [cost, setCost] = useState(0)
   const [waveformData, setWaveformData] = useState(null)
   const [textInput, setTextInput] = useState('')    // fallback text input for testing
+  const [pendingImages, setPendingImages] = useState([])  // images to attach to next message
   const [activeModel, setActiveModel] = useState('google/gemini-2.5-flash')
   const [modelReason, setModelReason] = useState('')
   const chatEndRef = useRef(null)
   const ragIndexRef = useRef(null)
+  const imageInputRef = useRef(null)
   const { debugVisible, toggleDebug, setDebugVisible } = useDebugToggle()
 
   // Build RAG index if needed
@@ -50,11 +53,18 @@ export function Session({ config, onBack }) {
     }
   }, [extractedData])
 
+  // Is this an image-based session?
+  const isVisionMode = extractedData?.type === 'image'
+
   // Build system prompt with text reference
   const buildSystemPrompt = useCallback((userMessage) => {
     let textSection = ''
 
-    if (extractedData?.text) {
+    if (isVisionMode) {
+      textSection = `[IMAGE DE RÉFÉRENCE — ${fileInfo?.title || 'Photo'}]
+L'image jointe montre une page de livre photographiée par le lecteur.
+Lis le texte visible sur l'image et utilise-le comme référence pour tes réponses.`
+    } else if (extractedData?.text) {
       if (ragIndexRef.current) {
         // RAG mode: search relevant chunks
         const results = ragIndexRef.current.search(userMessage)
@@ -66,7 +76,7 @@ export function Session({ config, onBack }) {
     }
 
     return SYSTEM_PROMPT_TEMPLATE + (textSection ? '\n\n' + textSection : '')
-  }, [extractedData, fileInfo])
+  }, [extractedData, fileInfo, isVisionMode])
 
   // Hooks
   const stt = useSTT()
@@ -109,6 +119,45 @@ export function Session({ config, onBack }) {
       role: m.role === 'coach' ? 'assistant' : m.role,
       content: m.content,
     }))
+
+    // In vision mode, attach setup image(s) to the first user message
+    if (isVisionMode && extractedData?.images?.length > 0) {
+      const firstUserIdx = apiMessages.findIndex(m => m.role === 'user')
+      if (firstUserIdx !== -1 && typeof apiMessages[firstUserIdx].content === 'string') {
+        const imageContent = extractedData.images.map(img => ({
+          type: 'image_url',
+          image_url: { url: img.dataUrl },
+        }))
+        apiMessages[firstUserIdx] = {
+          role: 'user',
+          content: [
+            ...imageContent,
+            { type: 'text', text: apiMessages[firstUserIdx].content },
+          ],
+        }
+      }
+    }
+
+    // Attach any pending inline images to the LAST user message
+    if (pendingImages.length > 0) {
+      const lastIdx = apiMessages.length - 1
+      const lastMsg = apiMessages[lastIdx]
+      if (lastMsg.role === 'user') {
+        const imageContent = pendingImages.map(img => ({
+          type: 'image_url',
+          image_url: { url: img.dataUrl },
+        }))
+        const textContent = typeof lastMsg.content === 'string'
+          ? [{ type: 'text', text: lastMsg.content }]
+          : lastMsg.content.filter(c => c.type === 'text')
+        apiMessages[lastIdx] = {
+          role: 'user',
+          content: [...imageContent, ...textContent],
+        }
+        debugLog(`👁️ Attached ${pendingImages.length} image(s) to message`)
+        setPendingImages([])
+      }
+    }
 
     // Estimate cost (rough)
     const inputChars = systemPrompt.length + apiMessages.reduce((a, m) => a + m.content.length, 0)
@@ -280,6 +329,22 @@ export function Session({ config, onBack }) {
     sendToLLM(msg)
   }, [status, textInput, sendToLLM])
 
+  // --- Image attachment handler ---
+  const handleImageAttach = useCallback(async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const result = await extractImage(file)
+      setPendingImages(prev => [...prev, ...result.images])
+      debugLog(`📷 Image attached: ${file.name} (${result.images[0].sizeKB}KB)`)
+    } catch (err) {
+      debugLog(`❌ Image error: ${err.message}`)
+      setError('Impossible de lire cette image')
+    }
+    // Reset input so same file can be re-selected
+    e.target.value = ''
+  }, [])
+
   // Expose sendToLLM globally for E2E testing
   useEffect(() => {
     window.__TEST_SEND = (text) => sendToLLM(text)
@@ -333,6 +398,7 @@ export function Session({ config, onBack }) {
             {modelName}
             {activeModel.includes('pro') && <span className="badge-pro">⚡ Pro</span>}
             {fileInfo?.mode === 'RAG' && <span className="badge-rag">📎 RAG</span>}
+            {fileInfo?.mode === 'Vision' && <span className="badge-vision">👁️ Vision</span>}
           </div>
         </div>
         <button className="reset-btn" onClick={(e) => { e.stopPropagation(); handleReset() }} title="Reset">↻</button>
@@ -388,15 +454,40 @@ export function Session({ config, onBack }) {
 
       {/* Text input fallback (for testing / accessibility) */}
       <form className="text-input-bar" onSubmit={handleTextSubmit}>
+        <button
+          type="button"
+          className="attach-btn"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={status !== 'idle'}
+          title="Joindre une photo 📷"
+        >📷</button>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,.jpg,.jpeg,.png,.webp,.heic"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={handleImageAttach}
+        />
         <input
           type="text"
-          placeholder="Ou tape ta question ici…"
+          placeholder={pendingImages.length > 0 ? `📷 ${pendingImages.length} image(s) — pose ta question…` : 'Ou tape ta question ici…'}
           value={textInput}
           onChange={(e) => setTextInput(e.target.value)}
           disabled={status !== 'idle'}
         />
         <button type="submit" disabled={status !== 'idle' || !textInput.trim()}>↑</button>
       </form>
+      {pendingImages.length > 0 && (
+        <div className="pending-images">
+          {pendingImages.map((img, i) => (
+            <div key={i} className="pending-thumb">
+              <img src={img.dataUrl} alt={`Photo ${i+1}`} />
+              <button onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Status bar */}
       <StatusBar

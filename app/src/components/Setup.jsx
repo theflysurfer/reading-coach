@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react'
 import { extractPDF } from '../lib/extractPDF'
 import { extractEPUB } from '../lib/extractEPUB'
 import { extractText } from '../lib/extractText'
+import { extractImage } from '../lib/extractImage'
 import { needsRAG } from '../lib/ragIndex'
 
 export function Setup({ onStart }) {
@@ -29,18 +30,32 @@ export function Setup({ onStart }) {
         result = await extractEPUB(file)
       } else if (ext === 'txt') {
         result = await extractText(file)
+      } else if (['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext)) {
+        result = await extractImage(file)
       } else {
-        throw new Error('Format non supporté. Utilise PDF, EPUB ou TXT.')
+        throw new Error('Format non supporté. Utilise PDF, EPUB, TXT ou une image (JPG/PNG).')
       }
 
-      const isRAG = needsRAG(result.text)
-      setFileInfo({
-        title: result.title,
-        charCount: result.charCount,
-        pageCount: result.pageCount,
-        mode: isRAG ? 'RAG' : 'Complet',
-      })
-      setExtractedData(result)
+      if (result.type === 'image') {
+        // Image mode — no RAG, vision-based
+        setFileInfo({
+          title: result.title,
+          charCount: 0,
+          pageCount: 1,
+          mode: 'Vision',
+          imageCount: result.images.length,
+        })
+        setExtractedData(result)
+      } else {
+        const isRAG = needsRAG(result.text)
+        setFileInfo({
+          title: result.title,
+          charCount: result.charCount,
+          pageCount: result.pageCount,
+          mode: isRAG ? 'RAG' : 'Complet',
+        })
+        setExtractedData(result)
+      }
     } catch (e) {
       console.error('Extraction error:', e)
       setError(e.message || 'Impossible de lire ce fichier')
@@ -91,13 +106,13 @@ export function Setup({ onStart }) {
         >
           <div className="file-drop-icon">📄</div>
           <div className="file-drop-label">
-            {loading ? 'Extraction en cours…' : 'Importer PDF, EPUB ou TXT'}
+            {loading ? 'Extraction en cours…' : 'Importer PDF, EPUB, TXT ou photo 📷'}
           </div>
         </div>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.epub,.txt"
+          accept=".pdf,.epub,.txt,.jpg,.jpeg,.png,.webp,.heic,application/pdf,application/epub+zip,text/plain,image/jpeg,image/png,image/webp,image/heic"
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files[0]
@@ -109,9 +124,13 @@ export function Setup({ onStart }) {
       {/* File info feedback */}
       {fileInfo && (
         <div className="file-info">
-          ✅ {fileInfo.title} — {(fileInfo.charCount / 1000).toFixed(0)}k caractères
-          {fileInfo.pageCount && ` — ${fileInfo.pageCount} pages`}
-          {' '}— Mode {fileInfo.mode}
+          ✅ {fileInfo.title}
+          {fileInfo.mode === 'Vision'
+            ? ` — ${fileInfo.imageCount} image(s) — Mode Vision 👁️`
+            : <>{' '}— {(fileInfo.charCount / 1000).toFixed(0)}k caractères
+              {fileInfo.pageCount && ` — ${fileInfo.pageCount} pages`}
+              {' '}— Mode {fileInfo.mode}</>
+          }
         </div>
       )}
       {error && (
