@@ -26,6 +26,8 @@ jobs:
       - name: Build
         working-directory: app
         run: npm run build
+        env:
+          VITE_OPENROUTER_KEY: ${{ secrets.VITE_OPENROUTER_KEY }}
 
       - name: Deploy to Hostinger
         uses: appleboy/scp-action@v0.1.7

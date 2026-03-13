@@ -12,7 +12,7 @@ const MODELS = [
 ]
 
 export function Setup({ onStart }) {
-  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('or_key') || '')
+  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('or_key') || import.meta.env.VITE_OPENROUTER_KEY || '')
   const [model, setModel] = useState(MODELS[0].id)
   const [fileInfo, setFileInfo] = useState(null)
   const [extractedData, setExtractedData] = useState(null)
