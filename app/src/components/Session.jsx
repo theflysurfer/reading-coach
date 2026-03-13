@@ -299,7 +299,7 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
     }
     waitForTTS()
 
-  }, [status, tts, messages, apiKey, model, buildSystemPrompt])
+  }, [status, tts, messages, apiKey, buildSystemPrompt, isVisionMode, extractedData, pendingImages])
 
   // --- PTT handlers ---
   const handlePTTStart = useCallback(() => {
