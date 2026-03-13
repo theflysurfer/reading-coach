@@ -254,16 +254,6 @@ html, body {
   margin-left: 0.4rem;
 }
 
-.badge-vision {
-  font-size: 0.65rem;
-  background: #fef3c7;
-  color: #92400e;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  font-weight: 600;
-  margin-left: 0.4rem;
-}
-
 .session-header .reset-btn {
   background: none;
   border: none;
@@ -617,4 +607,435 @@ html, body {
 .welcome-msg .emoji {
   font-size: 2.5rem;
   margin-bottom: 0.75rem;
+}
+
+/* === Library Screen === */
+.library-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+  position: relative;
+}
+
+.library-header {
+  padding: 1.5rem 1.5rem 1rem;
+  text-align: center;
+}
+
+.library-header h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  padding: 0 1rem 6rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.book-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.book-card:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-lg);
+}
+
+.book-card-cover {
+  width: 100%;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+}
+
+.book-card-placeholder {
+  width: 100%;
+  aspect-ratio: 2/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.book-card-info {
+  padding: 0.5rem 0.6rem;
+}
+
+.book-card-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.book-card-author {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-card-meta {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.book-card-badge {
+  font-size: 0.6rem;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.book-card-sessions {
+  font-size: 0.6rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.empty-library {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  padding: 2rem;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-hint {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  opacity: 0.7;
+}
+
+/* FAB (Floating Action Button) */
+.fab {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-size: 1.8rem;
+  font-weight: 300;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: transform 0.15s;
+}
+
+.fab:active {
+  transform: scale(0.9);
+}
+
+/* Context menu */
+.context-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.context-menu {
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 1rem;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.context-menu button {
+  padding: 0.75rem 1rem;
+  border: none;
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.context-menu button.danger {
+  color: var(--accent-red);
+}
+
+/* === Add Book Screen === */
+.add-book-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1.5rem;
+  max-width: 480px;
+  margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.add-book-screen h1 {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.add-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.add-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 2px solid #e8e8e8;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.add-option:active {
+  border-color: var(--primary);
+  background: var(--bubble-user);
+}
+
+.add-option-icon {
+  font-size: 2rem;
+  margin-bottom: 0.3rem;
+}
+
+.add-option-label {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.add-option-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* === ISBN Scanner === */
+.isbn-scanner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1.5rem;
+  max-width: 480px;
+  margin: 0 auto;
+  gap: 1rem;
+}
+
+.isbn-scanner h2 {
+  font-size: 1.3rem;
+}
+
+.btn-scan, .btn-manual {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid #e8e8e8;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-scan:active, .btn-manual:active {
+  border-color: var(--primary);
+  background: var(--bubble-user);
+}
+
+.btn-icon {
+  font-size: 1.5rem;
+}
+
+.btn-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.scan-viewport {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 4/3;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000;
+}
+
+.scan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-frame {
+  width: 70%;
+  height: 40%;
+  border: 3px solid rgba(79, 70, 229, 0.7);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.4);
+}
+
+.scan-hint {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.isbn-hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.isbn-form {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.isbn-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: var(--radius);
+  font-size: 1.1rem;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.isbn-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Book preview (ISBN confirmation) */
+.book-preview {
+  display: flex;
+  gap: 1rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+  width: 100%;
+}
+
+.book-preview-cover {
+  width: 80px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.book-preview-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.book-preview-title {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.book-preview-author {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+
+.book-preview-pages {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.book-preview-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+  line-height: 1.3;
+}
+
+.book-preview-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.loading-msg {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 1rem;
+}
+
+.badge-vision {
+  font-size: 0.65rem;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: 0.4rem;
 }

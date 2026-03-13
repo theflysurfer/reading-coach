@@ -9,6 +9,7 @@ import { useVAD } from '../hooks/useVAD'
 import { needsRAG, buildIndex, formatChunksForPrompt } from '../lib/ragIndex'
 import { selectModel } from '../lib/modelRouter'
 import { extractImage } from '../lib/extractImage'
+import { saveMessage, updateSessionCost } from '../lib/db'
 
 const SYSTEM_PROMPT_TEMPLATE = `Tu es un coach de lecture expert, chaleureux et exigeant.
 Le lecteur lit un texte physiquement et te cite des passages oralement.
@@ -23,15 +24,15 @@ Contraintes :
 - Ne répète pas le passage mot pour mot
 - Termine TOUJOURS par une question unique`
 
-export function Session({ config, onBack }) {
-  log('🎬', 'Session mounted', { hasText: !!config?.extractedData?.text, hasImages: !!config?.extractedData?.images, fileInfo: config?.fileInfo })
-  const { apiKey, extractedData, fileInfo } = config
-  const [messages, setMessages] = useState([])    // { role, content, sourceRef? }
+export function Session({ config, onBack, onNewSession }) {
+  log('🎬', 'Session mounted', { hasText: !!config?.extractedData?.text, hasImages: !!config?.extractedData?.images, fileInfo: config?.fileInfo, sessionId: config?.sessionId })
+  const { apiKey, extractedData, fileInfo, sessionId } = config
+  const [messages, setMessages] = useState(config.existingMessages || [])
   const [streamingText, setStreamingText] = useState('')
   const [status, setStatus] = useState('idle')     // idle | listening | thinking | speaking
   const [error, setError] = useState(null)
   const [vadEnabled, setVadEnabled] = useState(false)
-  const [cost, setCost] = useState(0)
+  const [cost, setCost] = useState(config.existingCost || 0)
   const [waveformData, setWaveformData] = useState(null)
   const [textInput, setTextInput] = useState('')    // fallback text input for testing
   const [pendingImages, setPendingImages] = useState([])  // images to attach to next message
@@ -102,6 +103,8 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
     // Add user message
     const userMsg = { role: 'user', content: userText }
     setMessages(prev => [...prev, userMsg])
+    // Persist user message
+    if (sessionId) saveMessage(sessionId, userMsg).catch(() => {})
     setStatus('thinking')
     setStreamingText('')
 
@@ -274,12 +277,17 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
       }
 
       // Add coach message
-      setMessages(prev => [...prev, {
-        role: 'coach',
-        content: fullResponse,
-        sourceRef,
-      }])
+      const coachMsg = { role: 'coach', content: fullResponse, sourceRef }
+      setMessages(prev => [...prev, coachMsg])
       setStreamingText('')
+      // Persist coach message + cost
+      if (sessionId) {
+        saveMessage(sessionId, coachMsg).catch(() => {})
+        setCost(prev => {
+          updateSessionCost(sessionId, prev + callCost).catch(() => {})
+          return prev + callCost
+        })
+      }
 
     } catch (e) {
       if (e.name !== 'AbortError') {
@@ -377,11 +385,16 @@ Lis le texte visible sur l'image et utilise-le comme référence pour tes répon
   // Reset conversation
   const handleReset = () => {
     tts.stop()
+    // Create a new session for the same book
+    if (onNewSession) {
+      onNewSession()
+    }
     setMessages([])
     setStreamingText('')
     setStatus('idle')
     setError(null)
     setCost(0)
+    logAction('SESSION_RESET')
   }
 
   // Model display name
