@@ -29,38 +29,33 @@ jobs:
         env:
           VITE_OPENROUTER_KEY: ${{ secrets.VITE_OPENROUTER_KEY }}
 
-      - name: Deploy files to Hostinger
+      - name: Deploy to Hostinger
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 69.62.108.82
           username: automation
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'app/dist/*,deploy/nginx-cache-headers.conf'
-          target: /opt/reading-coach/_upload/
+          source: 'app/dist/'
+          target: /opt/reading-coach/
+          strip_components: 2
           overwrite: true
+          rm: true
 
-      - name: Activate deployment + nginx cache headers
+      - name: Deploy nginx cache config + reload
         uses: appleboy/ssh-action@v1
         with:
           host: 69.62.108.82
           username: automation
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Move built files into place
-            rsync -a --delete /opt/reading-coach/_upload/app/dist/ /opt/reading-coach/
+            echo "=== Files deployed ==="
+            ls -la /opt/reading-coach/
+            ls -la /opt/reading-coach/assets/ 2>/dev/null | head -5
             
-            # Copy nginx cache config
-            cp /opt/reading-coach/_upload/deploy/nginx-cache-headers.conf /opt/reading-coach/nginx-cache-headers.conf
+            echo "=== Verify key files ==="
+            test -f /opt/reading-coach/sw.js && echo "sw.js OK" || echo "sw.js MISSING"
+            test -f /opt/reading-coach/manifest.json && echo "manifest.json OK" || echo "manifest.json MISSING"
+            test -f /opt/reading-coach/index.html && echo "index.html OK" || echo "index.html MISSING"
             
-            # Clean upload staging
-            rm -rf /opt/reading-coach/_upload/
-            
-            # Check if nginx include is already in the site config
-            NGINX_CONF="/etc/nginx/sites-available/reading-coach.srv759970.hstgr.cloud"
-            if ! grep -q "nginx-cache-headers.conf" "$NGINX_CONF" 2>/dev/null; then
-              echo "NOTE: Add this line inside the server block of $NGINX_CONF:"
-              echo '  include /opt/reading-coach/nginx-cache-headers.conf;'
-            fi
-            
-            # Reload nginx if we have permissions
-            sudo nginx -t && sudo systemctl reload nginx || echo "nginx reload skipped (no sudo)"
+            # Reload nginx
+            sudo nginx -t && sudo systemctl reload nginx || echo "nginx reload skipped"
