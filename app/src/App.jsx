@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { Library } from './components/Library'
 import { AddBook } from './components/AddBook'
 import { Session } from './components/Session'
-import { getBook, createSession, getLastSessionForBook, getSession, addBook } from './lib/db'
+import { getBook, getBooks, updateBook, createSession, getLastSessionForBook, getSession, addBook } from './lib/db'
 import { log, logAction } from './lib/logger'
+import { lookupISBN } from './lib/isbnLookup'
 
 /**
  * App — 3 screens:
@@ -16,6 +17,31 @@ export default function App() {
   const [sessionConfig, setSessionConfig] = useState(null)
 
   const apiKey = import.meta.env.VITE_OPENROUTER_KEY || sessionStorage.getItem('or_key') || ''
+
+  // On startup: backfill missing covers for ISBN books
+  useEffect(() => {
+    (async () => {
+      try {
+        const allBooks = await getBooks()
+        for (const book of allBooks) {
+          if (book.isbn && !book.coverUrl) {
+            log('🔄', `Backfilling cover for "${book.title}" (ISBN: ${book.isbn})`)
+            const meta = await lookupISBN(book.isbn)
+            if (meta?.coverUrl) {
+              await updateBook(book.id, {
+                coverUrl: meta.coverUrl,
+                author: book.author || meta.author || '',
+                pageCount: book.pageCount || meta.pageCount,
+              })
+              log('✅', `Cover updated for "${book.title}"`)
+            }
+          }
+        }
+      } catch (e) {
+        log('⚠️', `Cover backfill error: ${e.message}`)
+      }
+    })()
+  }, [])
 
   // Open a book → resume last session or create new one
   const handleOpenBook = useCallback(async (book) => {
